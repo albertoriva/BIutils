@@ -33,6 +33,8 @@ class DBField(object):
         for v in fields:
             if v == 'I':
                 self.ftype = 'INT'
+            elif v == 'R':
+                self.ftype = 'REAL'
             elif v == 'T':
                 self.ftype = 'TEXT'
             elif v[0] == 'C':
@@ -69,7 +71,7 @@ class DBTable(object):
         return "CREATE TABLE {} ({});".format(self.name, ", ".join([str(f) for f in self.fields]))
 
     def drop(self):
-        return "DROP TABLE {};".format(self.name)
+        return "DROP TABLE IF EXISTS {};".format(self.name)
 
     def indexes(self):
         l = []
@@ -86,6 +88,7 @@ class Database(object):
     tables = {}
     _conn = None
     _lvl = 0
+    _verbose = False
 
     def __init__(self, filename, *tables):
         self.filename = filename
@@ -96,7 +99,6 @@ class Database(object):
     def __enter__(self):
         if not self._conn:
             self._conn = sql.connect(self.filename)
-            print self._conn
         self._lvl += 1
         return self
 
@@ -110,7 +112,12 @@ class Database(object):
         self.tables[tab.name] = tab
 
     def execute(self, statement, args=()):
+        if self._verbose:
+            sys.stderr.write("Executing: {} {}\n".format(statement, args))
         self._conn.execute(statement, args)
+
+    def commit(self):
+        self._conn.commit()
 
     def create(self):
         for tab in self.tables.values():
@@ -128,4 +135,3 @@ if __name__ == "__main__":
                                        DBField("test2", "C5,X,N,D'abc'")))
     with DB:
         DB.create()
-    

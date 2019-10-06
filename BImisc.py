@@ -8,6 +8,7 @@ __date__      = "Mar 19 2019"
 __version__   = "1.0"
 
 import sys
+import gzip
 import os.path
 import subprocess as sp
 
