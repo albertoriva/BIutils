@@ -122,6 +122,8 @@ class Database(object):
     def create(self):
         for tab in self.tables.values():
             self._conn.execute(tab.drop())
+            w = tab.create()
+            print w
             self._conn.execute(tab.create())
             for i in tab.indexes():
                 self._conn.execute(i)
