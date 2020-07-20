@@ -65,7 +65,7 @@ class DBTable(object):
 
     def __init__(self, name, *fields):
         self.name = name
-        self.fields = fields
+        self.fields = [ DBField(f[0], f[1]) for f in fields ]
 
     def create(self):
         return "CREATE TABLE {} ({});".format(self.name, ", ".join([str(f) for f in self.fields]))
@@ -111,6 +111,12 @@ class Database(object):
     def addTable(self, tab):
         self.tables[tab.name] = tab
 
+    def getTable(self, tablename):
+        if tablename in self.tables:
+            return self.tables[tablename]
+        else:
+            return None
+
     def execute(self, statement, args=()):
         if self._verbose:
             sys.stderr.write("Executing: {} {}\n".format(statement, args))
@@ -125,6 +131,69 @@ class Database(object):
             self._conn.execute(tab.create())
             for i in tab.indexes():
                 self._conn.execute(i)
+
+    def tuplesToDict(self, table, querytail=""):
+        tab = self.getTable(table)
+        if tab:
+            alltuples = []
+            c = self._conn.cursor()
+            fnames = ["ROWID"] + [ f.name for f in tab.fields ]
+            q = "SELECT " + ",".join(fnames) + " FROM " + table + " " + querytail + ";"
+            c.execute(q)
+            for row in c.fetchall():
+                result = {}
+                for f, d in zip(fnames, row):
+                    result[f] = d
+                alltuples.append(result)
+            return alltuples
+        return []
+
+    def queryToDict(self, query, fnames):
+        alltuples = []
+        c = self._conn.cursor()
+        c.execute(query)
+        for row in c.fetchall():
+            result = {}
+            for f, d in zip(fnames, row):
+                result[f] = d
+            alltuples.append(result)
+        return alltuples
+
+    def rowToDict(self, table, querytail=""):
+        tab = self.getTable(table)
+        if tab:
+            result = {}
+            c = self._conn.cursor()
+            fnames = ["ROWID"] + [ f.name for f in tab.fields ]
+            q = "SELECT " + ",".join(fnames) + " FROM " + table + " " + querytail + ";"
+            c.execute(q)
+            row = c.fetchone()
+            if row:
+                for f, d in zip(fnames, row):
+                    result[f] = d
+                return result
+            else:
+                return None
+        else:
+            return None
+
+    def getColumn(self, query, column=0):
+        result = []
+        c = self._conn.cursor()
+        c.execute(query)
+        for row in c.fetchall():
+            result.append(row[column])
+        return result
+
+    def getRow(self, query):
+        c = self._conn.cursor()
+        c.execute(query)
+        return c.fetchone()
+
+    def getValue(self, query, column=0):
+        c = self._conn.cursor()
+        c.execute(query)
+        return c.fetchone()[column]
 
 def initDB(filename):
     pass

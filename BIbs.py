@@ -10,6 +10,13 @@ import subprocess
 
 COMMANDS = ["list", "meta", "info", "initdir", "all", "api", "nreads", "report"]
 
+def toList(s):
+    """If s is not a list, return [s]."""
+    if type(s).__name__ == "list":
+        return s
+    else:
+        return [s]
+
 class BSClient():
     config = None
     command = None
@@ -50,10 +57,14 @@ Where command is one of: {}
 
 """.format(", ".join(COMMANDS)))
 
-    def callBS(self, arguments, fmt="csv"):
+    def callBS(self, arguments, fmt="csv", token=False):
         """Low-level method to call bs with the supplied arguments, adding the flag for csv output
 (unless `csv' is False). Returns  command output as a string."""
-        cmdline = "bs " + " ".join(arguments)
+
+        cmdline = "bs --api-server https://api.basespace.illumina.com/ " 
+        if token:
+            cmdline += "--access-token " + token + " "
+        cmdline += " ".join(arguments)
         if self.config:
             cmdline += " -c " + self.config
         cmdline += " -f " + fmt
@@ -136,16 +147,17 @@ Where command is one of: {}
     def callAPI(self):
         print self.callBS(self.args)
 
-    def projectReads(self, proj, write=False):
-        w = self.callBS(["list", "datasets", "--project-name", proj], fmt="json")
+    def projectReads(self, proj, token=False, write=False):
+        w = toList(self.callBS(["list", "datasets", "--project-name", proj], fmt="json", token=token))
         totalReads = 0
         samples = []
         for entry in w:
-            name = entry["Name"]
-            attr = entry["Attributes"]["common_fastq"]
-            nr = int(attr["TotalReadsPF"])
-            totalReads += nr
-            samples.append([name, nr])
+            if "Name" in entry:
+                name = entry["Name"]
+                attr = entry["Attributes"]["common_fastq"]
+                nr = int(attr["TotalReadsPF"])
+                totalReads += nr
+                samples.append([name, nr])
         samples.sort(key=lambda k:k[0])
         if write:
             for s in samples:
