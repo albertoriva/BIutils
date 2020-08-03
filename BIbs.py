@@ -18,13 +18,15 @@ def toList(s):
         return [s]
 
 class BSClient():
+    bspath = "bs"
     config = None
     command = None
     args = []
 
-    def __init__(self, cmd=None):
+    def __init__(self, cmd=None, bspath="bs"):
         self.command = cmd
         self.args = []
+        self.bspath = bspath
 
     def parseArgs(self, args):
         if not args:
@@ -58,10 +60,10 @@ Where command is one of: {}
 """.format(", ".join(COMMANDS)))
 
     def callBS(self, arguments, fmt="csv", token=False):
-        """Low-level method to call bs with the supplied arguments, adding the flag for csv output
-(unless `csv' is False). Returns  command output as a string."""
+        """Low-level method to call bs with the supplied arguments. If `fmt' is "csv" (the default)
+the result is a string, while if it is "json" the result is a parsed JSON dictionary."""
 
-        cmdline = "bs --api-server https://api.basespace.illumina.com/ " 
+        cmdline = self.bspath + " --api-server https://api.basespace.illumina.com/ " 
         if token:
             cmdline += "--access-token " + token + " "
         cmdline += " ".join(arguments)
