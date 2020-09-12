@@ -61,6 +61,27 @@ def decodeUnits(x):
     else:
         return (x, 1)
     
+def printWithUnits(b, digits=2):
+    # Return a string containing the number b formatted as K, M, G, T, P
+    # as appropriate.
+    fmt = "{{:.{}f}} ".format(digits)
+    if b < 1024:
+        return str(b)
+    b = b / 1024.0
+    if b < 1024:
+        return fmt.format(b) + "K"
+    b = b / 1024.0
+    if b < 1024:
+        return fmt.format(b) + "M"
+    b = b / 1024.0
+    if b < 1024:
+        return fmt.format(b) + "G"
+    b = b / 1024.0
+    if b < 1024:
+        return fmt.format(b) + "T"
+    b = b / 1024.0
+    return fmt.format(b) + "P"
+
 def parseFraction(f):
     """Parse a fraction (a string of the form N/D) returning a float.
 Returns None if f is not in the form N/D, or if D is 0."""
