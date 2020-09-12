@@ -33,6 +33,46 @@ class Plot():
             if a in attributes:
                 setattr(self, a, attributes[a])
 
+    def standardArgs(self, args):
+        prev = ""
+        for a in args:
+            if prev == "-o":
+                self.filename = a
+                prev = ""
+            elif prev == "-t":
+                self.title = a
+                prev = ""
+            elif prev == "-xl":
+                self.xlabel = a
+                prev = ""
+            elif prev == "-yl":
+                self.ylabel = a
+                prev = ""
+            elif prev == "-xs":
+                self.hsize = float(a)
+                prev == ""
+            elif prev == "-ys":
+                self.vsize = float(a)
+                prev = ""
+            elif a in ["-o", "-t", "-xl", "-yl", "-xs", "-ys"]:
+                prev = a
+
+    def parseDatafile(self):
+        self.data = []
+        with open(self.datafile, "r") as f:
+            c = csv.reader(f, delimiter='\t')
+            for line in c:
+                if len(line) > 0 and line[0][0] == '#':
+                    continue
+                self.storeLine(line)
+
+    def storeLine(self, line):
+        self.data.append([float(line[0]), float(line[1])])
+
+    def run(self):
+        self.parseDatafile()
+        self.plot()
+                
     def nextColor(self):
         c = self.colors[self.coloridx]
         self.coloridx = (self.coloridx + 1) % len(self.colors)
@@ -48,8 +88,8 @@ class Plot():
         if self.ylabel:
             ax.set_ylabel(self.ylabel)
 
-    def plot(self, filename):
-        self.filename = filename
+    def plot(self, filename=None):
+        pass
 
 class BarChart(Plot):
     """Draw a bar chart for multiple data series. Each row in `data' corresponds
@@ -57,8 +97,9 @@ to a series, and has the same number of elements as the length of `xticklabels'.
     xticklabels = None
     attrNames = ['data', 'series', 'title', 'xlabel', 'ylabel', 'xticklabels']
 
-    def plot(self, filename):
-        self.filename = filename
+    def plot(self, filename=None):
+        if filename:
+            self.filename = filename
         matplotlib.style.use('default')
         S = len(self.data)
         N = len(self.data[0])
@@ -85,8 +126,9 @@ class PercentageBars(Plot):
     xticklabels = None
     attrNames = ['data', 'series', 'title', 'xlabel', 'ylabel', 'xticklabels']
 
-    def plot(self, filename):
-        self.filename = filename
+    def plot(self, filename=None):
+        if filename:
+            self.filename = filename
         matplotlib.style.use('default')
         barWidth = 0.8
         nvalues = len(self.xticklabels)
@@ -106,7 +148,6 @@ class PercentageBars(Plot):
         plt.legend(bars, self.series)
         fig.savefig(filename)
 
-
 class Scatterplot(Plot):
     fc = None                   # Fold change threshold
     pval = None                 # P-value threshold (default: don't check p-values)
@@ -115,7 +156,28 @@ class Scatterplot(Plot):
     truncate = True
     limits = None
 
-    def plot(self, filename):
+    def parseArgs(self, args):
+        self.standardArgs()
+        prev = ""
+        for a in args:
+            if prev == "-fc":
+                self.fc = float(a)
+                prev = ""
+            elif prev == "-p":
+                self.pval = float(a)
+                prev = ""
+            elif prev == "-m":
+                self.maxv = float(a)
+                prev = ""
+            elif a in ["-fc", "-p", "-m"]:
+                prev = a
+            elif a == "-T":
+                self.truncate = False
+            else:
+                self.datafile = a
+        return True
+
+    def plot(self, filename=None):
         xover = []
         yover = []
         xunder = []
@@ -131,7 +193,8 @@ class Scatterplot(Plot):
         nnn      = 0
 
         # data is a list of pairs [x, y]
-        self.filename = filename
+        if filename:
+            self.filename = filename
         v1 = np.array([d[0] for d in self.data])
         v2 = np.array([d[1] for d in self.data])
         # v3 = np.array([d[2] for d in self.data])
@@ -176,10 +239,6 @@ class Scatterplot(Plot):
                 xother.append(row[1])
             nplotted += 1
 
-        # sys.stderr.write("Sig: {}\nOther: {}\n".format(len(xsig), len(xother)))
-        # sys.stderr.write("Over: {}\nUnder: {}\n".format(len(xover), len(xunder)))
-        # sys.stderr.write("Filtered: {}\nnnn: {}\n".format(nfilt, nnn))
-        # raw_input()
         fig, ax = plt.subplots(figsize=(self.hsize, self.vsize))
         if self.truncate or self.limits:
             ax.set_autoscale_on(False)
@@ -201,7 +260,7 @@ class FoldChangePlot(Plot):
     correlation = None          # Correlation (computed)
     maxv = 5
 
-    def plot(self, filename):
+    def plot(self, filename=None):
         xover = []
         yover = []
         xunder = []
@@ -217,7 +276,8 @@ class FoldChangePlot(Plot):
         nnn      = 0
 
         # data is a list of pairs [x, y]
-        self.filename = filename
+        if filename:
+            self.filename = filename
 
         for row in self.data:
             #print (row, row[2], self.pval, row[2] <= self.pval)
@@ -253,10 +313,6 @@ class FoldChangePlot(Plot):
                 xother.append(row[1])
             nplotted += 1
 
-        # sys.stderr.write("Sig: {}\nOther: {}\n".format(len(xsig), len(xother)))
-        # sys.stderr.write("Over: {}\nUnder: {}\n".format(len(xover), len(xunder)))
-        # sys.stderr.write("Filtered: {}\nnnn: {}\n".format(nfilt, nnn))
-        # raw_input()
         fig, ax = plt.subplots(figsize=(self.hsize, self.vsize))
         ax.set_autoscale_on(False)
         ax.scatter(xother, yother, color='k', s=1)
@@ -272,7 +328,27 @@ class VolcanoPlot(Plot):
     pval = 2                 # P-value threshold (in -log10 scale)
     plot_all = False         # If true, plot all genes (not just significant ones)
 
-    def plot(self, filename):
+    def parseArgs(self, args):
+        self.standardArgs()
+        prev = ""
+        for a in args:
+            if prev == "-f":
+                P.fc = float(a)
+                prev = ""
+            elif prev == "-p":
+                P.pval = -np.log10(float(a))
+                prev = ""
+            elif a in ["-f", "-p"]:
+                prev = a
+            elif a == "-a":
+                P.plot_all = True
+            else:
+                P.datafile = a
+
+    def storeLine(self, line):
+        self.data.append([float(line[3]), float(line[4])])
+
+    def plot(self, filename=None):
         xover = []
         yover = []
         xunder = []
@@ -281,7 +357,8 @@ class VolcanoPlot(Plot):
         yother = []
 
         # data is a list of pairs [fc, pval]
-        self.filename = filename
+        if filename:
+            self.filename = filename
         for row in self.data:
             fc = row[0]
             lp = -np.log10(row[1])
@@ -313,14 +390,15 @@ class MAplot(Plot):
     maxx = 20
     maxy = 0
 
-    def plot(self, filename):
+    def plot(self, filename=None):
         xs = []
         ys = []
         xsig = []
         ysig = []
         nplotted = 0
 
-        self.filename = filename
+        if filename:
+            self.filename = filename
         for row in self.data:
             if row[0] == 0 or row[1] == 0:
                 continue
@@ -354,85 +432,50 @@ class HockeyStickPlot(Plot):
     normalize = False
      
     def parseArgs(self, args):
+        self.standardArgs(args)
         prev = ""
         for a in args:
-            if prev == "-o":
-                self.filename = a
-                prev = ""
-            elif a in ["-o"]:
-                prev = a
-            elif a == "-l":
+            if a == "-l":
                 self.logscale = True
             elif a == "-n":
                 self.normalize = True
             else:
                 self.datafile = a
-   
-    def run(self):
-        with open(self.datafile, "r") as f:
-            c = csv.reader(f, delimiter='\t')
-            for line in c:
-                if self.normalize:
-                    w = int(line[2]) - int(line[1]) + 1
-                    v = float(line[3]) / w
-                else:
-                    v = float(line[3])
-                if self.logscale:
-                    v = np.log10(v)
-                self.data.append(v)
+        return True
+
+    def storeLine(self, line):
+        if self.normalize:
+            w = int(line[2]) - int(line[1]) + 1
+            v = float(line[3]) / w
+        else:
+            v = float(line[3])
+        if self.logscale:
+            v = np.log10(v)
+        self.data.append(v)
+        
+    def plot(self, filename=None):
+        if filename:
+            self.filename = filename
         self.data.sort()
         fig, ax = plt.subplots(figsize=(self.hsize, self.vsize))
         ax.set_autoscale_on(True)
         ax.scatter(range(len(self.data)), self.data, color='k', s=1)
         fig.savefig(self.filename)
 
-def main_volcano(args):
-    P = VolcanoPlot(title='Volcano plot', ylabel="-log10(P-value)", xlabel="log2(FC)")
-    data = []
-    prev = ""
-    for a in args:
-        if prev == "-o":
-            P.filename = a
-            prev = ""
-        elif prev == "-t":
-            P.title = a
-            prev = ""
-        elif prev == "-f":
-            P.fc = float(a)
-            prev = ""
-        elif prev == "-p":
-            P.pval = -np.log10(float(a))
-            prev = ""
-        elif a in ["-o", "-t", "-f", "-p"]:
-            prev = a
-        elif a == "-a":
-            P.plot_all = True
-        else:
-            P.datafile = a
-
-    with open(P.datafile, "r") as f:
-        c = csv.reader(f, delimiter='\t')
-        c.next()
-        for line in c:
-            data.append([float(line[3]), float(line[4])])
-    P.data = data
-    P.plot(P.filename)
-
-def main_hockey(args):
-    P = HockeyStickPlot(title='Hockeystick plot')
-    P.parseArgs(args)
-    P.run()
-
 def main(args):
-    epoints = {'volcano': main_volcano,
-               'hockey': main_hockey}
+    classes = {'hockey': HockeyStickPlot,
+               'volcano': VolcanoPlot}
 
     if args:
         cmd = args[0]
-        if cmd in epoints:
-            func = epoints[cmd]
-            return func(args[1:])
-    usage()
+        if cmd in classes:
+            P = classes[cmd]()
+            if P.parseArgs(args[1:]):
+                P.run()
+            else:
+                usage()
+    else:
+        usage()
 
 def usage():
     sys.stdout.write("""Usage: ...
