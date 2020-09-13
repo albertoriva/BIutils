@@ -23,6 +23,10 @@ class Plot():
     xlabel = None
     hsize = 12
     vsize = 8
+    xcolumn = 0
+    ycolumn = 1
+    grid = None
+    color = 'k'
     attrNames = ['data', 'series', 'title', 'xlabel', 'ylabel', 'hsize', 'vsize']
     #colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray', 'tab:olive', 'tab:cyan']
     colors = ['g', 'r', 'c', 'm', 'y', 'k']
@@ -42,6 +46,15 @@ class Plot():
             elif prev == "-t":
                 self.title = a
                 prev = ""
+            elif prev == "-g":
+                if a in "xyXY":
+                    self.grid = a.lower()
+                else:
+                    self.grid = "both"
+                prev = ""
+            elif prev == "-c":
+                self.color = a
+                prev = ""
             elif prev == "-xl":
                 self.xlabel = a
                 prev = ""
@@ -54,10 +67,32 @@ class Plot():
             elif prev == "-ys":
                 self.vsize = float(a)
                 prev = ""
-            elif a in ["-o", "-t", "-xl", "-yl", "-xs", "-ys"]:
+            elif prev == "-xc":
+                self.xcolumn = int(a) - 1
+                prev = ""
+            elif prev == "-yc":
+                self.ycolumn = int(a) - 1
+                prev = ""
+            elif a in ["-o", "-t", "-g", "-c", "-xl", "-yl", "-xs", "-ys", "-xc", "-yc"]:
                 prev = a
 
+    def standardHelp(self, out=sys.stdout):
+        out.write("""Common options:
+ -o O  | Write image to file O
+ -t T  | Set image title
+ -g G  | Set grid; G is one of x, y, b(oth)
+ -c C  | Draw plot using color C (one of 'g', 'r', 'c', 'm', 'y', 'k')
+ -xl L | Label for X axis
+ -yl L | Label for Y axis
+ -xs S | Image width in inches (default: {})
+ -ys S | Image height in inches (default: {})
+ -xc C | Column containing X values in data file (default: {})
+ -yc C | Column containing Y values in data file (default: {})
+""".format(self.hsize, self.vsize, self.xcolumn+1, self.ycolumn+1))
+                
     def parseDatafile(self):
+        """Generic method to read data from tab-delimited files. Passes
+line contents to storeLine(). Lines starting with # are ignored."""
         self.data = []
         with open(self.datafile, "r") as f:
             c = csv.reader(f, delimiter='\t')
@@ -67,9 +102,12 @@ class Plot():
                 self.storeLine(line)
 
     def storeLine(self, line):
-        self.data.append([float(line[0]), float(line[1])])
+        """Generic method to store data from a tab-delimited line. By default
+reads X value from xcolumn, Y value from ycolumn."""
+        self.data.append([float(line[self.xcolumn]), float(line[self.ycolumn])])
 
     def run(self):
+        """Generic method to generate image. Calls parseDatafile() and plot()."""
         self.parseDatafile()
         self.plot()
                 
@@ -89,7 +127,17 @@ class Plot():
             ax.set_ylabel(self.ylabel)
 
     def plot(self, filename=None):
-        pass
+        if filename:
+            self.filename = filename
+        matplotlib.style.use('default')
+        fig, ax = plt.subplots(figsize=(self.hsize, self.vsize))
+
+        self.plot0(ax)
+
+        if self.grid:
+            ax.grid(axis=self.grid)
+        self.set_labels(ax)
+        fig.savefig(self.filename)
 
 class BarChart(Plot):
     """Draw a bar chart for multiple data series. Each row in `data' corresponds
@@ -97,47 +145,48 @@ to a series, and has the same number of elements as the length of `xticklabels'.
     xticklabels = None
     attrNames = ['data', 'series', 'title', 'xlabel', 'ylabel', 'xticklabels']
 
-    def plot(self, filename=None):
-        if filename:
-            self.filename = filename
-        matplotlib.style.use('default')
+    def parseArgs(self, args):
+        self.standardArgs(args)
+        prev = ""
+        for a in args:
+            if prev == "-xt":
+                self.xticklabels = a.split(",")
+                prev = ""
+            elif a in ["-xt"]:
+                prev = a
+            else:
+                self.datafile = a
+        if self.datafile:
+            return True
+                
+    def plot0(self, ax):
         S = len(self.data)
         N = len(self.data[0])
         ind = np.arange(N)
         width = 1.0/(S+1)       # the width of the bars
         w2 = width / 2.0
 
-        fig, ax = plt.subplots(figsize=(self.hsize, self.vsize))
         p = ind + w2
         rects = []
         for row in self.data:
             rects.append(ax.bar(p, row, width, color=self.nextColor()))
             p += width
 
-        self.set_labels(ax)
         ax.set_xticks(ind + (width * S) / 2.0)
         ax.set_xticklabels(self.xticklabels)
-
         ax.legend([r[0] for r in rects], self.series)
 
-        fig.savefig(filename)
-
-class PercentageBars(Plot):
+class PercentageBars(BarChart):
     xticklabels = None
     attrNames = ['data', 'series', 'title', 'xlabel', 'ylabel', 'xticklabels']
 
-    def plot(self, filename=None):
-        if filename:
-            self.filename = filename
-        matplotlib.style.use('default')
+    def plot0(self, ax):
         barWidth = 0.8
         nvalues = len(self.xticklabels)
         xcoords = range(nvalues)
         bottoms = [0.0]*nvalues
 
         bars = []
-        fig, ax = plt.subplots(figsize=(self.hsize, self.vsize))
-        self.set_labels(ax)
         for lab in self.series:
             values = self.data[lab]
             bars.append(plt.bar(xcoords, values, bottom=bottoms, edgecolor="white", width=barWidth))
@@ -146,7 +195,6 @@ class PercentageBars(Plot):
         plt.xticks(xcoords, self.xticklabels)
         plt.xlabel("Sample")
         plt.legend(bars, self.series)
-        fig.savefig(filename)
 
 class Scatterplot(Plot):
     fc = None                   # Fold change threshold
@@ -157,7 +205,7 @@ class Scatterplot(Plot):
     limits = None
 
     def parseArgs(self, args):
-        self.standardArgs()
+        self.standardArgs(args)
         prev = ""
         for a in args:
             if prev == "-fc":
@@ -175,9 +223,11 @@ class Scatterplot(Plot):
                 self.truncate = False
             else:
                 self.datafile = a
-        return True
 
-    def plot(self, filename=None):
+        if self.datafile:
+            return True
+
+    def plot0(self, ax):
         xover = []
         yover = []
         xunder = []
@@ -192,19 +242,12 @@ class Scatterplot(Plot):
         nfilt    = 0
         nnn      = 0
 
-        # data is a list of pairs [x, y]
-        if filename:
-            self.filename = filename
         v1 = np.array([d[0] for d in self.data])
         v2 = np.array([d[1] for d in self.data])
         # v3 = np.array([d[2] for d in self.data])
         self.correlation = np.corrcoef(v1, v2)
         if self.truncate:
             self.maxv = max(np.percentile(v1, 90.0), np.percentile(v2, 90.0))
-        # sys.stderr.write("Max: {}\n".format(self.maxv))
-        # sys.stderr.write("Data: {}\n".format(len(self.data)))
-        # sys.stderr.write("Pval: {} Range: {} - {}\n".format(self.pval, np.min(v3), np.max(v3)))
-        # raw_input()
         for row in self.data:
             #print (row, row[2], self.pval, row[2] <= self.pval)
             if row[0] > self.maxv or row[1] > self.maxv:
@@ -239,20 +282,16 @@ class Scatterplot(Plot):
                 xother.append(row[1])
             nplotted += 1
 
-        fig, ax = plt.subplots(figsize=(self.hsize, self.vsize))
         if self.truncate or self.limits:
             ax.set_autoscale_on(False)
         ax.scatter(xother, yother, color='k', s=1)
         ax.scatter(xover, yover, color='#FF8C00', s=1)
         ax.scatter(xunder, yunder, color='#0000FF', s=1)
         ax.scatter(xsig, ysig, color='#FF0000', s=1)
-        ax.grid(True)
         if self.truncate:
             ax.axis([0, self.maxv, 0, self.maxv])
         elif self.limits:
             ax.axis(self.limits)
-        self.set_labels(ax)
-        fig.savefig(filename)
 
 class FoldChangePlot(Plot):
     fc = None                   # Fold change threshold
@@ -260,7 +299,7 @@ class FoldChangePlot(Plot):
     correlation = None          # Correlation (computed)
     maxv = 5
 
-    def plot(self, filename=None):
+    def plot0(self, ax):
         xover = []
         yover = []
         xunder = []
@@ -274,10 +313,6 @@ class FoldChangePlot(Plot):
         nunder   = 0
         nfilt    = 0
         nnn      = 0
-
-        # data is a list of pairs [x, y]
-        if filename:
-            self.filename = filename
 
         for row in self.data:
             #print (row, row[2], self.pval, row[2] <= self.pval)
@@ -313,15 +348,12 @@ class FoldChangePlot(Plot):
                 xother.append(row[1])
             nplotted += 1
 
-        fig, ax = plt.subplots(figsize=(self.hsize, self.vsize))
-        ax.set_autoscale_on(False)
         ax.scatter(xother, yother, color='k', s=1)
         ax.scatter(xover, yover, color='#FF8C00', s=1)
         ax.scatter(xunder, yunder, color='#0000FF', s=1)
         ax.scatter(xsig, ysig, color='#FF0000', s=1)
+        ax.set_autoscale_on(False)
         ax.axis([0, self.maxv, 0, self.maxv])
-        self.set_labels(ax)
-        fig.savefig(filename)
 
 class VolcanoPlot(Plot):
     fc = 1                   # Fold change threshold
@@ -329,7 +361,7 @@ class VolcanoPlot(Plot):
     plot_all = False         # If true, plot all genes (not just significant ones)
 
     def parseArgs(self, args):
-        self.standardArgs()
+        self.standardArgs(args)
         prev = ""
         for a in args:
             if prev == "-f":
@@ -344,11 +376,11 @@ class VolcanoPlot(Plot):
                 P.plot_all = True
             else:
                 P.datafile = a
-
-    def storeLine(self, line):
-        self.data.append([float(line[3]), float(line[4])])
-
-    def plot(self, filename=None):
+        self.xcolumn = 3
+        self.ycolumn = 4
+        return True
+    
+    def plot0(self, ax):
         xover = []
         yover = []
         xunder = []
@@ -357,8 +389,6 @@ class VolcanoPlot(Plot):
         yother = []
 
         # data is a list of pairs [fc, pval]
-        if filename:
-            self.filename = filename
         for row in self.data:
             fc = row[0]
             lp = -np.log10(row[1])
@@ -375,13 +405,10 @@ class VolcanoPlot(Plot):
             elif self.plot_all:
                 xother.append(fc)
                 yother.append(lp)
-        fig, ax = plt.subplots(figsize=(self.hsize, self.vsize))
         ax.scatter(xother, yother, color='k', s=1)
         ax.scatter(xover, yover, color='#FF0000', s=1)
         ax.scatter(xunder, yunder, color='#00FF00', s=1)
         ax.axis([-5.0, 5.0, 0, 10.0])
-        self.set_labels(ax)
-        fig.savefig(filename)
 
 class MAplot(Plot):
     fc = 1                      # Fold change threshold
@@ -422,7 +449,7 @@ class MAplot(Plot):
 
         fig, ax = plt.subplots(figsize=(self.hsize, self.vsize))
         ax.set_autoscale_on(False)
-        ax.scatter(xs, ys, color='k', s=1)
+        ax.scatter(xs, ys, color=self.color, s=1)
         ax.axis([0, self.maxx, -self.maxy, self.maxy])
         self.set_labels(ax)
         fig.savefig(filename)
@@ -453,18 +480,14 @@ class HockeyStickPlot(Plot):
             v = np.log10(v)
         self.data.append(v)
         
-    def plot(self, filename=None):
-        if filename:
-            self.filename = filename
-        self.data.sort()
-        fig, ax = plt.subplots(figsize=(self.hsize, self.vsize))
+    def plot0(self, ax):
         ax.set_autoscale_on(True)
-        ax.scatter(range(len(self.data)), self.data, color='k', s=1)
-        fig.savefig(self.filename)
+        ax.scatter(range(len(self.data)), self.data, color=self.color, s=1)
 
 def main(args):
     classes = {'hockey': HockeyStickPlot,
-               'volcano': VolcanoPlot}
+               'volcano': VolcanoPlot,
+               'scatter': Scatterplot}
 
     if args:
         cmd = args[0]
