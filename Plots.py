@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 ### Easy plotting
 
 class Plot():
+    __doc__ = "Simple plot, on one or more data series."
     datafile = ""               # Input file
     filename = ""               # Output file (png)
     data = []
@@ -21,23 +22,34 @@ class Plot():
     title = None
     ylabel = None
     xlabel = None
+    xlimits = None
+    ylimits = None
     hsize = 12
     vsize = 8
     xcolumn = 0
     ycolumn = 1
     grid = None
     color = 'k'
+    skipHeader = False
     attrNames = ['data', 'series', 'title', 'xlabel', 'ylabel', 'hsize', 'vsize']
     #colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:gray', 'tab:olive', 'tab:cyan']
     colors = ['g', 'r', 'c', 'm', 'y', 'k']
     coloridx = 0
+    nplots = 1                  # number of side-by-side plots (single row for now)
 
     def __init__(self, **attributes):
         for a in self.attrNames:
             if a in attributes:
                 setattr(self, a, attributes[a])
+        self.init()
+
+    def init(self):
+        self.data = []
 
     def standardArgs(self, args):
+        if not args or "-h" in args or "--help" in args:
+            return self.usage()
+        restargs = []
         prev = ""
         for a in args:
             if prev == "-o":
@@ -63,7 +75,7 @@ class Plot():
                 prev = ""
             elif prev == "-xs":
                 self.hsize = float(a)
-                prev == ""
+                prev = ""
             elif prev == "-ys":
                 self.vsize = float(a)
                 prev = ""
@@ -73,27 +85,53 @@ class Plot():
             elif prev == "-yc":
                 self.ycolumn = int(a) - 1
                 prev = ""
-            elif a in ["-o", "-t", "-g", "-c", "-xl", "-yl", "-xs", "-ys", "-xc", "-yc"]:
+            elif prev == "-xr":
+                parts = a.split(":")
+                self.xlimits = [float(parts[0]), float(parts[1])]
+                prev = ""
+            elif prev == "-yr":
+                parts = a.split(":")
+                self.ylimits = [float(parts[0]), float(parts[1])]
+                prev = ""
+            elif a in ["-o", "-t", "-g", "-c", "-xl", "-yl", "-xs", "-ys", "-xc", "-yc", "-xr", "-yr"]:
                 prev = a
+            elif a == "-H":
+                self.skipheader = True
+            else:
+                restargs.append(a)
+        return restargs
+
+    def usage(self):
+        self.standardHelp()
+
+    def parseArgs(self, args):
+        args = self.standardArgs(args)
+        if args:
+            self.datafile = args[0]
+            return True
+        return False
 
     def standardHelp(self, out=sys.stdout):
         out.write("""Common options:
- -o O  | Write image to file O
- -t T  | Set image title
- -g G  | Set grid; G is one of x, y, b(oth)
- -c C  | Draw plot using color C (one of 'g', 'r', 'c', 'm', 'y', 'k')
- -xl L | Label for X axis
- -yl L | Label for Y axis
- -xs S | Image width in inches (default: {})
- -ys S | Image height in inches (default: {})
- -xc C | Column containing X values in data file (default: {})
- -yc C | Column containing Y values in data file (default: {})
+ -o O    | Write image to file O
+ -t T    | Set image title
+ -g G    | Set grid; G is one of x, y, b(oth)
+ -c C    | Draw plot using color C (one of 'g', 'r', 'c', 'm', 'y', 'k')
+ -xl L   | Label for X axis
+ -yl L   | Label for Y axis
+ -xs S   | Image width in inches (default: {})
+ -ys S   | Image height in inches (default: {})
+ -xc C   | Column containing X values in data file (default: {})
+ -yc C   | Column containing Y values in data file (default: {})
+ -xr A:B | Set X axis range to A - B
+ -yr A:B | Set Y axis range to A - B
+
 """.format(self.hsize, self.vsize, self.xcolumn+1, self.ycolumn+1))
-                
+        return False
+
     def parseDatafile(self):
         """Generic method to read data from tab-delimited files. Passes
 line contents to storeLine(). Lines starting with # are ignored."""
-        self.data = []
         with open(self.datafile, "r") as f:
             c = csv.reader(f, delimiter='\t')
             for line in c:
@@ -126,27 +164,75 @@ reads X value from xcolumn, Y value from ycolumn."""
         if self.ylabel:
             ax.set_ylabel(self.ylabel)
 
+    def setRanges(self, ax):
+#        ax.set_autoscale_on(True)
+        if self.xlimits:
+            sys.stderr.write("Setting X range to {}\n".format(self.xlimits))
+            plt.xlim(self.xlimits)
+        if self.ylimits:
+            sys.stderr.write("Setting Y range to {}\n".format(self.ylimits))
+            plt.ylim(self.ylimits)
+
     def plot(self, filename=None):
         if filename:
             self.filename = filename
         matplotlib.style.use('default')
-        fig, ax = plt.subplots(figsize=(self.hsize, self.vsize))
+        fig, ax = plt.subplots(1, self.nplots, figsize=(self.hsize, self.vsize), sharey=True)
+
+        self.setRanges(ax)
 
         self.plot0(ax)
-
+        
         if self.grid:
             ax.grid(axis=self.grid)
         self.set_labels(ax)
         fig.savefig(self.filename)
 
+    def plot0(self, ax):
+        #ax.scatter([v[0] for v in self.data], [v[1] for v in self.data])
+        ax.plot([v[0] for v in self.data], [v[1] for v in self.data])
+
+class Histogram(Plot):
+    "Histogram on a single data series."
+    nbins = 10
+    rwidth = None
+    attrNames = ["nbins"]
+
+    def parseArgs(self, args):
+        args = self.standardArgs(args)
+        prev = ""
+        for a in args:
+            if prev == "-n":
+                self.nbins = int(a)
+                prev = ""
+            elif prev == "-r":
+                self.rwidth = float(a)
+                prev = ""
+            elif a  in ["-n", "-r"]:
+                prev = a
+            else:
+                self.datafile = a
+        return self.datafile
+
+    def storeLine(self, line):
+        """Generic method to store data from a tab-delimited line. By default
+reads X value from xcolumn, Y value from ycolumn."""
+        self.data.append(float(line[self.xcolumn]))
+
+    def plot0(self, ax):
+        ax.hist(self.data, bins=self.nbins, rwidth=self.rwidth)
+
 class BarChart(Plot):
-    """Draw a bar chart for multiple data series. Each row in `data' corresponds
-to a series, and has the same number of elements as the length of `xticklabels'."""
+    "Bar chart on one or more data series."
     xticklabels = None
     attrNames = ['data', 'series', 'title', 'xlabel', 'ylabel', 'xticklabels']
 
+    def usage(self):
+        sys.stdout.write("""Draw a bar chart for multiple data series. Each row in `data' corresponds
+to a series, and has the same number of elements as the length of `xticklabels'.""")
+
     def parseArgs(self, args):
-        self.standardArgs(args)
+        args = self.standardArgs(args)
         prev = ""
         for a in args:
             if prev == "-xt":
@@ -180,6 +266,9 @@ class PercentageBars(BarChart):
     xticklabels = None
     attrNames = ['data', 'series', 'title', 'xlabel', 'ylabel', 'xticklabels']
 
+    def init(self):
+        pass
+
     def plot0(self, ax):
         barWidth = 0.8
         nvalues = len(self.xticklabels)
@@ -203,9 +292,15 @@ class Scatterplot(Plot):
     maxv = 1000
     truncate = True
     limits = None
+    # Not used, but stored if necessary
+    cols1 = None
+    cols2 = None
+
+    def init(self):
+        pass
 
     def parseArgs(self, args):
-        self.standardArgs(args)
+        args = self.standardArgs(args)
         prev = ""
         for a in args:
             if prev == "-fc":
@@ -247,7 +342,9 @@ class Scatterplot(Plot):
         # v3 = np.array([d[2] for d in self.data])
         self.correlation = np.corrcoef(v1, v2)
         if self.truncate:
-            self.maxv = max(np.percentile(v1, 90.0), np.percentile(v2, 90.0))
+            m1 = np.percentile(v1, 90.0)
+            m2 = np.percentile(v2, 90.0)
+            self.maxv = max(m1, m2)
         for row in self.data:
             #print (row, row[2], self.pval, row[2] <= self.pval)
             if row[0] > self.maxv or row[1] > self.maxv:
@@ -359,23 +456,30 @@ class VolcanoPlot(Plot):
     fc = 1                   # Fold change threshold
     pval = 2                 # P-value threshold (in -log10 scale)
     plot_all = False         # If true, plot all genes (not just significant ones)
+    xlabel = "log2(FC)"
+    ylabel = "-log10(P-value)"
+    nup = 0
+    ndown = 0
+
+    def init(self):
+        pass
 
     def parseArgs(self, args):
-        self.standardArgs(args)
+        args = self.standardArgs(args)
         prev = ""
         for a in args:
             if prev == "-f":
-                P.fc = float(a)
+                self.fc = float(a)
                 prev = ""
             elif prev == "-p":
-                P.pval = -np.log10(float(a))
+                self.pval = -np.log10(float(a))
                 prev = ""
             elif a in ["-f", "-p"]:
                 prev = a
             elif a == "-a":
-                P.plot_all = True
+                self.plot_all = True
             else:
-                P.datafile = a
+                self.datafile = a
         self.xcolumn = 3
         self.ycolumn = 4
         return True
@@ -396,9 +500,11 @@ class VolcanoPlot(Plot):
                 if fc > self.fc:
                     xover.append(fc)
                     yover.append(lp)
+                    self.nup += 1
                 elif fc < -self.fc:
                     xunder.append(fc)
                     yunder.append(lp)
+                    self.ndown += 1
                 elif self.plot_all:
                     xother.append(fc)
                     yother.append(lp)
@@ -406,9 +512,12 @@ class VolcanoPlot(Plot):
                 xother.append(fc)
                 yother.append(lp)
         ax.scatter(xother, yother, color='k', s=1)
-        ax.scatter(xover, yover, color='#FF0000', s=1)
-        ax.scatter(xunder, yunder, color='#00FF00', s=1)
-        ax.axis([-5.0, 5.0, 0, 10.0])
+        ax.scatter(xover, yover, color='#FF0000', s=2, marker='o')
+        ax.scatter(xunder, yunder, color='#00FF00', s=2, marker='o')
+        ax.axhline(self.pval, 0.0, 1.0, color='#0000FF', linestyle=':')
+        ax.axvline(-self.fc, 0.0, 1.0, color='#0000FF', linestyle=':')
+        ax.axvline(self.fc, 0.0, 1.0, color='#0000FF', linestyle=':')
+        # ax.axis([-5.0, 5.0, 0, 10.0])
 
 class MAplot(Plot):
     fc = 1                      # Fold change threshold
@@ -459,7 +568,7 @@ class HockeyStickPlot(Plot):
     normalize = False
      
     def parseArgs(self, args):
-        self.standardArgs(args)
+        args = self.standardArgs(args)
         prev = ""
         for a in args:
             if a == "-l":
@@ -481,28 +590,152 @@ class HockeyStickPlot(Plot):
         self.data.append(v)
         
     def plot0(self, ax):
-        ax.set_autoscale_on(True)
+        self.data.sort()
         ax.scatter(range(len(self.data)), self.data, color=self.color, s=1)
 
-def main(args):
-    classes = {'hockey': HockeyStickPlot,
-               'volcano': VolcanoPlot,
-               'scatter': Scatterplot}
+class BoxPlot(Plot):
+    logscale = False
+    percentile = None
 
+    def init(self):
+        self.data = [ [], [] ]
+
+    def parseArgs(self, args):
+        args = self.standardArgs(args)
+        self.nplots = 2
+        prev = ""
+        for a in args:
+            if prev == "-p":
+                self.percentile = int(a)
+                prev = ""
+            elif a in ["-p"]:
+                prev = a
+            elif a == "-l":
+                self.logscale = True
+            else:
+                self.datafile = a
+        self.data2 = []
+        return True
+
+    def storeLine(self, line):
+        good = True
+        a = float(line[1])
+        b = float(line[2])
+        if self.logscale:
+            if a == 0:
+                good = False
+            else:
+                a = np.log10(a)
+            if b == 0:
+                good = False
+            else:
+                b = np.log10(b)
+        if good:
+            self.data[0].append(a)
+            self.data[1].append(b)
+
+    def clip(self, limit):
+        d1 = []
+        d2 = []
+        for i in range(len(self.data)):
+            a = self.data[0][i]
+            b = self.data[1][i]
+            if a <= limit and b <= limit:
+                d1.append(a)
+                d2.append(b)
+        return d1, d2
+
+    def plot0(self, ax):
+        if self.percentile:
+            limit = min(np.percentile(self.data, self.percentile), np.percentile(self.data2, self.percentile))
+            self.data, self.data2 = self.clip(limit)
+
+        (bp1, bp2) = ax
+        bp1.boxplot(self.data)
+        bp1.set_title("MUT")
+        bp2.boxplot(self.data2)
+        bp2.set_title("WT")
+
+class ViolinPlot(Plot):
+    nfiles = 0
+
+    def init(self):
+        self.data = []
+
+    def parseArgs(self, args):
+        restargs = self.standardArgs(args)
+        self.datafile = restargs
+        self.nfiles = len(self.datafile)
+        #print self.datafile
+        return True
+    
+    def parseDatafile(self):
+        self.data = [ [] for _ in range(self.nfiles) ]
+        for idx in range(self.nfiles):
+            with open(self.datafile[idx], "r") as f:
+                c = csv.reader(f, delimiter='\t')
+                for line in c:
+                    if len(line) > 0 and line[0][0] == '#':
+                        continue
+                    self.data[idx].append(float(line[1]))
+
+    def plot0(self, ax):
+        ax.violinplot(self.data, vert=True, showmeans=True, showmedians=True)
+        ax.grid()
+
+CLASSES = {'plot': Plot,
+           'bars': BarChart,
+           'percbars': PercentageBars,
+           'scatter': Scatterplot,
+           'fcplot': FoldChangePlot,
+           'volcano': VolcanoPlot,
+           'maplot': MAplot,
+           'hockey': HockeyStickPlot,
+           'boxplot': BoxPlot,
+           'violin': ViolinPlot,
+           'hist': Histogram}
+
+def listPlotTypes():
+    labels = sorted(CLASSES.keys())
+    ml = max([len(l) for l in labels])
+    fmt = "{:" + str(ml) + "} | {}\n"
+    bar = "-"*ml + "-|---------------------------\n"
+    sys.stdout.write("Available plot types:\n\n")
+    sys.stdout.write(fmt.format("Name", "Description"))
+    sys.stdout.write(bar)
+    for k in labels:
+        desc = CLASSES[k]().__doc__
+        sys.stdout.write(fmt.format(k, desc))
+    sys.stdout.write("\n")
+
+def main(args):
     if args:
+        if "-L" in args:
+            return listPlotTypes()
         cmd = args[0]
-        if cmd in classes:
-            P = classes[cmd]()
+        if cmd in CLASSES:
+            P = CLASSES[cmd]()
             if P.parseArgs(args[1:]):
                 P.run()
             else:
-                usage()
+                P.usage()
+        else:
+            sys.stdout.write("ERROR: the first argument, `{}' should be a plot name.\n\n".format(cmd))
+            sys.stdout.write("Valid plot names: {}\n".format(", ".join(CLASSES.keys())))
     else:
         usage()
 
 def usage():
-    sys.stdout.write("""Usage: ...
+    sys.stdout.write("""Plots - simple command-line plotter.
+
+Usage: Plots.py plot-type [general options] [plot-specific options]
+
+Call `Plots.py -L' to display available plot types.
+
+Call `Plots.py plot-type -h' to see plot-specific options.
+
 """)
+    Plot().standardHelp()
 
 if __name__ == "__main__":
     main(sys.argv[1:])

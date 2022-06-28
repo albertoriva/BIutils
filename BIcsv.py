@@ -13,12 +13,13 @@ class CSVreader(object):
     _reader = None
     _stream = None
     _close = False
+    _header = []
 
     def __init__(self, source, delimiter='\t', skip=0):
         self._stream = open(source, "r")
         self._reader = csv.reader(self._stream, delimiter=delimiter)
         for i in range(skip):
-            self._reader.next()
+            self._header = self._reader.next()
         self._close = True
 
     def __iter__(self):
@@ -33,6 +34,45 @@ class CSVreader(object):
                 self._stream.close()
             raise e
         return row
+
+class DictCSVReader(object):
+    _reader = None
+    _stream = None
+    _delim  = "\t"
+    _close  = False
+    _header = []
+    _ncols  = 0
+    _row    = {}
+
+    def __init__(self, source, delimiter='\t'):
+        self._stream = open(source, "r")
+        self._reader = csv.reader(self._stream, delimiter=delimiter)
+        self._delim = delimiter
+        self._header = self._reader.next()
+        self._ncols = len(self._header)
+        self._row = dict([ (h, None) for h in self._header])
+        self._close = True
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        try:
+            row = self._reader.next()
+            for i in range(self._ncols):
+                self._row[self._header[i]] = row[i]
+        except StopIteration as e:
+            #sys.stderr.write("Cleanup!\n")
+            if self._close:
+                self._stream.close()
+            raise e
+        return self._row
+
+    def emitHeader(self):
+        return self._delim.join(self._header)
+
+    def emit(self):
+        return self._delim.join([self._row[h] for h in self._header])
 
 class DualCSVreader(object):
     _reader1 = None

@@ -136,3 +136,18 @@ class ShellScript():
             os.chmod(self.filename, 0o770)
         except:
             pass
+
+# Simulate case / typecase
+
+def case(datum, choices):
+    if datum in choices:
+        return choices[datum](datum)
+    return None
+
+def typecase(datum, choices):
+    typename = type(datum).__name__
+    if typename in choices:
+        return choices[typename](datum)
+    return None
+
+        
