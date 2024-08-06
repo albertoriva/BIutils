@@ -19,21 +19,24 @@ class CSVreader(object):
         self._stream = open(source, "r")
         self._reader = csv.reader(self._stream, delimiter=delimiter)
         for i in range(skip):
-            self._header = self._reader.next()
+            self._header = next(self._reader)
         self._close = True
 
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         try:
-            row = self._reader.next()
+            row = next(self._reader)
         except StopIteration as e:
             #sys.stderr.write("Cleanup!\n")
             if self._close:
                 self._stream.close()
             raise e
         return row
+
+    def next(self):
+        return __next__(self)
 
 class DictCSVReader(object):
     _reader = None
@@ -57,6 +60,9 @@ class DictCSVReader(object):
         return self
 
     def next(self):
+        return __next__(self)
+
+    def __next__(self):
         try:
             row = self._reader.next()
             for i in range(self._ncols):
@@ -86,6 +92,9 @@ class DualCSVreader(object):
         return self
 
     def next(self):
+        return __next__(self)
+
+    def __next__(self):
         row1 = self._reader1.next()
         row2 = self._reader2.next()
         if row1[0] == row2[0] and row1[1] == row2[1] and row1[2] == row2[2]:

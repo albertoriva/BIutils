@@ -2,7 +2,7 @@
 
 import sys
 import os.path
-from BImisc import get_iterator, decodeUnits, parseFraction
+from BIutils.BImisc import get_iterator, decodeUnits, parseFraction
 
 ### Class to define subcommands in program
 

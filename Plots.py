@@ -36,6 +36,7 @@ class Plot():
     colors = ['g', 'r', 'c', 'm', 'y', 'k']
     coloridx = 0
     nplots = 1                  # number of side-by-side plots (single row for now)
+    plotly = False
 
     def __init__(self, **attributes):
         for a in self.attrNames:
@@ -97,6 +98,8 @@ class Plot():
                 prev = a
             elif a == "-H":
                 self.skipheader = True
+            elif a == "-P":
+                self.plotly = True
             else:
                 restargs.append(a)
         return restargs
@@ -105,7 +108,6 @@ class Plot():
         self.standardHelp()
 
     def parseArgs(self, args):
-        args = self.standardArgs(args)
         if args:
             self.datafile = args[0]
             return True
@@ -147,7 +149,14 @@ reads X value from xcolumn, Y value from ycolumn."""
     def run(self):
         """Generic method to generate image. Calls parseDatafile() and plot()."""
         self.parseDatafile()
+        self.prepare()
         self.plot()
+
+    def prepare(self):
+        """Generic method to perform any initializations necessary after reading the data,
+and before calling plot().
+"""
+        pass
                 
     def nextColor(self):
         c = self.colors[self.coloridx]
@@ -176,6 +185,12 @@ reads X value from xcolumn, Y value from ycolumn."""
     def plot(self, filename=None):
         if filename:
             self.filename = filename
+
+        # If we want plotly output, just call plot0
+        if self.plotly:
+            return self.plot0(self.filename)
+
+        # Matplotlib output instead.
         matplotlib.style.use('default')
         fig, ax = plt.subplots(1, self.nplots, figsize=(self.hsize, self.vsize), sharey=True)
 
@@ -199,7 +214,6 @@ class Histogram(Plot):
     attrNames = ["nbins"]
 
     def parseArgs(self, args):
-        args = self.standardArgs(args)
         prev = ""
         for a in args:
             if prev == "-n":
@@ -232,7 +246,6 @@ class BarChart(Plot):
 to a series, and has the same number of elements as the length of `xticklabels'.""")
 
     def parseArgs(self, args):
-        args = self.standardArgs(args)
         prev = ""
         for a in args:
             if prev == "-xt":
@@ -270,6 +283,9 @@ class PercentageBars(BarChart):
         pass
 
     def plot0(self, ax):
+        if self.plotly:
+            print(self.series)
+            return
         barWidth = 0.8
         nvalues = len(self.xticklabels)
         xcoords = range(nvalues)
@@ -300,7 +316,6 @@ class Scatterplot(Plot):
         pass
 
     def parseArgs(self, args):
-        args = self.standardArgs(args)
         prev = ""
         for a in args:
             if prev == "-fc":
@@ -453,6 +468,7 @@ class FoldChangePlot(Plot):
         ax.axis([0, self.maxv, 0, self.maxv])
 
 class VolcanoPlot(Plot):
+    """Volcano plot: fold change on X axis, -log10(P-value) on Y axis."""
     fc = 1                   # Fold change threshold
     pval = 2                 # P-value threshold (in -log10 scale)
     plot_all = False         # If true, plot all genes (not just significant ones)
@@ -464,8 +480,17 @@ class VolcanoPlot(Plot):
     def init(self):
         pass
 
+    def usage(self):
+        sys.stdout.write("""Draw a volcano plot for a set of (fold-change, P-value) pairs, read from columns 4 and 5 of the input file.
+
+Plot-specific arguments:
+
+  -f F | Set fold change threshold to F (default: {})
+  -p P | Set P-value threshold to P (default: {})
+  -a   | If specified, plots all data items (default: only significant ones).
+""")
+
     def parseArgs(self, args):
-        args = self.standardArgs(args)
         prev = ""
         for a in args:
             if prev == "-f":
@@ -568,7 +593,6 @@ class HockeyStickPlot(Plot):
     normalize = False
      
     def parseArgs(self, args):
-        args = self.standardArgs(args)
         prev = ""
         for a in args:
             if a == "-l":
@@ -601,7 +625,6 @@ class BoxPlot(Plot):
         self.data = [ [], [] ]
 
     def parseArgs(self, args):
-        args = self.standardArgs(args)
         self.nplots = 2
         prev = ""
         for a in args:
@@ -663,8 +686,7 @@ class ViolinPlot(Plot):
         self.data = []
 
     def parseArgs(self, args):
-        restargs = self.standardArgs(args)
-        self.datafile = restargs
+        self.datafile = args
         self.nfiles = len(self.datafile)
         #print self.datafile
         return True
@@ -677,11 +699,41 @@ class ViolinPlot(Plot):
                 for line in c:
                     if len(line) > 0 and line[0][0] == '#':
                         continue
-                    self.data[idx].append(float(line[1]))
+                    self.data[idx].append(float(line[self.ycolumn]))
 
     def plot0(self, ax):
         ax.violinplot(self.data, vert=True, showmeans=True, showmedians=True)
         ax.grid()
+
+class KSPlot(Plot):
+    """Kolmogorov-Smirnoff plot (cumulative sum plot)."""
+
+    def init(self):
+        self.data = []
+        self.ycolumn = 0
+
+    def prepare(self):
+        self.data.sort()
+        self.xlimits = [0.0, 1.0]
+        self.ylimits = [0.0, 1.0]
+
+    def storeLine(self, line):
+        self.data.append(float(line[self.ycolumn]))
+
+    def plot0(self, ax):
+        step = 1/len(self.data)
+        xv = step
+        yv = self.data[0]
+        xs = [xv]
+        ys = [yv]
+        for d in self.data[1:]:
+            xv += step
+            yv += d
+            xs.append(xv)
+            ys.append(yv)
+
+        ys = [ y/yv for y in ys ]
+        ax.plot(xs, ys)
 
 CLASSES = {'plot': Plot,
            'bars': BarChart,
@@ -693,7 +745,8 @@ CLASSES = {'plot': Plot,
            'hockey': HockeyStickPlot,
            'boxplot': BoxPlot,
            'violin': ViolinPlot,
-           'hist': Histogram}
+           'hist': Histogram,
+           'ks': KSPlot}
 
 def listPlotTypes():
     labels = sorted(CLASSES.keys())
@@ -715,10 +768,12 @@ def main(args):
         cmd = args[0]
         if cmd in CLASSES:
             P = CLASSES[cmd]()
-            if P.parseArgs(args[1:]):
-                P.run()
-            else:
-                P.usage()
+            specargs = P.standardArgs(args[1:])
+            if specargs is not None:
+                if P.parseArgs(specargs):
+                    P.run()
+                else:
+                    P.usage()
         else:
             sys.stdout.write("ERROR: the first argument, `{}' should be a plot name.\n\n".format(cmd))
             sys.stdout.write("Valid plot names: {}\n".format(", ".join(CLASSES.keys())))

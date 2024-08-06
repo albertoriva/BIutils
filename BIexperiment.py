@@ -15,15 +15,17 @@ import sys
 from BIutils import BIcsv
 
 class Experiment(object):
-    conditions = []
-    condsamples = {}
-    samples = []
-    samplescond = []
+    conditions = []             # list of all conditions
+    condsamples = {}            # samples associated with each condition
+    samples = []                # list of all samples
+    samplescond = []            # index of condition for each sample
+    samplecondname = {}         # condition name associated with each sample
     contrasts = []
 
     def __init__(self):
         self.conditions = []
         self.condsamples = {}
+        self.samplecondname = {}
         self.samples = []
         self.samplescond = []
         self.contrasts = []
@@ -37,6 +39,7 @@ if any of the samples has already been defined."""
                 sys.stderr.write("Warning: duplicate sample name `{}'.\n".format(cs))
             self.samples.append(cs)
             self.samplescond.append(cidx)
+            self.samplecondname[cs] = cname
         self.conditions.append(cname)
         self.condsamples[cname] = csamples
 
@@ -47,6 +50,9 @@ if any of the samples has already been defined."""
         if ctrl not in self.conditions:
             sys.stderr.write("Error: {} is not a condition name.\n".format(ctrl))
             return False
+        if test == ctrl:
+            sys.stderr.write("Error: test and control conditions are the same ({}).\n".format(test))
+            return False
         self.contrasts.append([test, ctrl])
         return True
 
@@ -54,10 +60,16 @@ if any of the samples has already been defined."""
         """Initialize conditions and samples from a tab-delimited file. Each row contains two columns:
 a condition name, and a comma-delimited list of sample names."""
         for line in BIcsv.CSVreader(filename):
-            cname = line[0]
-            csamples = [ s.strip() for s in line[1].split(",") ]
-            self.addCondition(cname, csamples)
-    
+            if len(line) == 2:
+                cname = line[0]
+                csamples = [ s.strip() for s in line[1].split(",") ]
+                self.addCondition(cname, csamples)
+        # print(self.samples)
+        # print(self.conditions)
+        # print(self.samplescond)
+        # print(self.condsamples)
+        # print(self.samplecondname)
+        
     def initContrastsFromFile(self, filename):
         """Initialize contrasts from a tab-delimited file. Each row contains two columns:
 test condition, and control condition."""
@@ -68,7 +80,7 @@ test condition, and control condition."""
             else:
                 self.addContrast(line[0], line[1])
             ln += 1
-
+        
     def sampleLabels(self):
         "Returns a list with one element for each sample, being the condition the sample belongs to."""
         result = []
@@ -77,6 +89,22 @@ test condition, and control condition."""
                 result.append(cond)
         return result
 
+    def getSampleLabels(self, samples):
+        """Return the labels for the specified samples as a list."""
+        result = []
+        for smp in samples:
+            idx = 0
+            found = False
+            for s in self.samples:
+                if s == smp:
+                    result.append(self.conditions[self.samplescond[idx]])
+                    found = True
+                idx += 1
+            if not found:
+                sys.stderr.write("Error: column `{}' not found in conditions file.\n".format(smp))
+                sys.exit(1)
+        return result
+                
     def dump(self):
         sys.stdout.write("Conditions: {}\n".format(", ".join(self.conditions)))
         sys.stdout.write("Samples: {}\n".format(", ".join(self.samples)))

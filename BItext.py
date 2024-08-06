@@ -139,7 +139,10 @@ matched but the string is not finished - no action should be taken); NOMATCH
             # sys.stderr.write("{} found at pos {}\n".format(ch, self.idx))
             self.idx += 1
             if self.idx == self.slen:
-                sys.stdout.write(self.func(self.string))
+                try:
+                    sys.stdout.write(self.func(self.string))
+                except BrokenPipeError:
+                    sys.exit(0)
                 self.idx = 0
                 self._status = DONE
             else:
@@ -147,7 +150,10 @@ matched but the string is not finished - no action should be taken); NOMATCH
             return True
         else:
             if self.idx > 0:
-                sys.stdout.write(self.string[0:self.idx])
+                try:
+                    sys.stdout.write(self.string[0:self.idx])
+                except BrokenPipeError:
+                    sys.exit(0)
             self.idx = 0
             self._status = NOMATCH
             return False
@@ -186,4 +192,7 @@ class MultiMatcher(object):
             if new:
                 self.active = new
             else:
-                sys.stdout.write(ch)
+                try:
+                    sys.stdout.write(ch)
+                except BrokenPipeError:
+                    sys.exit(0)
